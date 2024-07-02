@@ -5,7 +5,7 @@ from admin_handlers import admin_router
 
 
 async def main():
-    bot = Bot(token='6415106720:AAFIPE4jxKrGPbOnGUgfqX6L4HfEOQzXPFM')
+    bot = Bot(token='')
     dp = Dispatcher()
     dp.include_router(router)
     dp.include_router(admin_router)
