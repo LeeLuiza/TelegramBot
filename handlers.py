@@ -1,9 +1,12 @@
 from aiogram import F, Router
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.filters import CommandStart, Command
+import time
+
 
 import keyboards as kb
 from admin_handlers import ADMIN_ID
+from api_client import APIClient
 
 router = Router()
 
@@ -26,11 +29,11 @@ HELP_COMMAND_ADMIN = """
 """
 
 MODEL = ''
-
+client = APIClient('http://127.0.0.1:8000')
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    # добавляем в бд нового пользователя и указываем роль
+    await client.add_user(message.from_user.username, 'client', 100)
     await message.answer('Добро пожаловать! Чтобы начать подсчет монет введите команду /count_coins')
 
 @router.message(Command('count_coins'))
@@ -47,9 +50,9 @@ async def help(message: Message):
 
 @router.message(Command('balance'))
 async def balance(message: Message):
-    # из бд получаем баланс текущего пользователя
-    balance = 100
-    await message.answer(f'Ваш текущий баланс: {balance}')
+    user = await client.get_user(message.from_user.username)
+    token_amount = user['token_amount']
+    await message.answer(f'Ваш текущий баланс: {token_amount}')
 
 @router.message(Command('history'))
 async def cmd_help(message: Message):
@@ -61,33 +64,28 @@ async def cmd_help(message: Message):
     await message.answer('Ваши избранные запросы:')
     # из бд получаем избранные вопросы
 
-@router.message(Command('id'))
-async def id(message: Message):
-    await message.answer(f'{message.from_user.id}')
+@router.message(F.text.in_({'yolo8s', 'yolo8m', 'yolo8n'}))
+async def check(message: Message):
+    global MODEL
+    await message.answer('Cделай фотографию для подсчета монет', reply_markup=ReplyKeyboardRemove())
+    MODEL = message.text
 
 @router.message(F.photo)
 async def image(message: Message):
-    # по определенной модели обработываем фотографию
-    # вычитаем из баланса некоторую стоимость
-    # сохраняем в историю его фотографию
-    await message.reply('На фотографии ...')
+    file_id = message.photo[-1].file_id
+    file = await message.download_file(file_id)
 
+    task_id = await client.send_img_to_api(message.from_user.username, file, MODEL)
+    if task_id == 1:
+        await message.answer('Произошла ошибка, попробуйте еще раз')
 
-@router.message(F.text.in_({'1', '2', 'выбрать все варианты'}))
-async def check(message: Message):
-    if message.text == 'выбрать все варианты':
-        await message.answer('Вы выбрали все варианты', reply_markup=ReplyKeyboardRemove())
-    elif message.text == '1':
-        await message.answer('Вы выбрали модель "1"', reply_markup=ReplyKeyboardRemove())
-    elif message.text == '2':
-        await message.answer('Вы выбрали модель "2"', reply_markup=ReplyKeyboardRemove())
-    await message.answer('Cделай фотографию для подсчета монет')
-
-
-
-
-
-
-
-
-
+    while True:
+        result = await client.get_img_to_api(task_id)
+        if result == 0:
+            time.sleep(5)
+        elif result == 1:
+            await message.answer('Произошла ошибка, попробуйте еще раз')
+            break
+        else:
+            await message.send_photo(result['result'])
+            break

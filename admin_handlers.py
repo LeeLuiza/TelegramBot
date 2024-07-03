@@ -21,9 +21,6 @@ async def new_users(message: Message):
         await message.answer('Неверный формат даты. Используйте формат даты "ГГГГ-ММ-ДД"')
         return
 
-    # Получаем список id новых пользователей, зарегистрированных в указанный период
-    #new_users = get_new_users(start_date, end_date)
-
     await message.answer(f'Количество новых пользователей за период с {start_date.date()} по {end_date.date()}:')
 
 
