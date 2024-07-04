@@ -19,10 +19,13 @@ class APIClient:
     async def get_user(self, user_name:str):
         async with aiohttp.ClientSession() as session:
             async with session.get(url=f'{self.url}/users/{user_name}') as response:
-                user = json.loads(await response.text())
-                return user
+                if response.status == 202:
+                    user = json.loads(await response.text())
+                    return user
+                else:
+                    return True
 
-    async def send_img_to_api(self, user_name, image_path, model):
+    async def use_yolo8m(self, user_name, image_path, model):
         async with aiohttp.ClientSession() as session:
             with open(image_path, 'rb') as image_file:
                 image_bytes = image_file.read()
@@ -41,13 +44,12 @@ class APIClient:
                         return 1
 
 
-    async def get_img_to_api(self, task_id:str):
+    async def get_result(self, task_id:str):
         async with aiohttp.ClientSession() as session:
-            async with session.get(url=f'{self.url}/tasks/{task_id}') as response:
+            async with session.get(url=f'{self.url}/cv/tasks/{task_id}') as response:
                 if response.status == 200:
                     img = json.loads(await response.text())
                     return img
                 elif response.status == 102:
                     return 0
                 return 1
-
