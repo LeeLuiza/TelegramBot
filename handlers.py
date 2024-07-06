@@ -3,7 +3,6 @@ from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.filters import CommandStart, Command
 import aiohttp
 import asyncio
-from asyncio import Queue
 
 
 import keyboards as kb
@@ -12,27 +11,32 @@ from api_client import APIClient
 
 router = Router()
 MODEL = ''
-clients_queue = Queue()
+queue = []
+client = APIClient('http://127.0.0.1:8000')
 
 HELP_COMMAND = """
 Список доступных команд:
-1. /balance - текущий баланс
-2. /history - история операций
-3. /favorites - избранные запросы
+1. /start - начало диалога с ботом
+2. /count_coins - подсчет монет
+3. /balance - текущий баланс
+4. /history - история операций
+5. /photo_by_id <id_task>- просмотреть фотографию, связанную с определенной задачей по id
+6. /model_price - стоимость моделей
 """
 
 HELP_COMMAND_ADMIN = """
 Список доступных команд для администратора:
-1. /balance - текущий баланс
-2. /history - история операций
-3. /favorites - избранные запросы
-4. /new_users <start_date> <end_date> - количество новых пользователей за период 
-5. /users_count - количество пользователей 
-6. /change_price <model_name> <new_price> - изменить стоимость модели 
-7. /change_balance <user_id> <new_balance> - изменить баланс пользователя 
+1. /count_coins - подсчет монет
+2. /balance - текущий баланс
+3. /history - история операций
+4. /photo_by_id <id_task>- просмотреть фотографию, связанную с определенной задачей по id
+5. /new_users <start_date> <end_date> - количество новых пользователей за период
+6. /users_count - количество пользователей
+7. /change_price <model_name> <new_price> - изменить стоимость модели
+8. /change_balance <user_name> <new_balance> - изменить баланс пользователя
+9. /balance_user <user_name> - посмотреть баланс пользователя
 """
 
-client = APIClient('http://127.0.0.1:8000')
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
@@ -41,10 +45,12 @@ async def cmd_start(message: Message):
         await client.add_user(message.from_user.username, 'client', 100)
     await message.answer('Добро пожаловать! Чтобы начать подсчет монет введите команду /count_coins')
 
+
 @router.message(Command('count_coins'))
 async def help(message: Message):
     await message.answer('Выберите модель для обработки фотографии',
                          reply_markup=kb.main)
+
 
 @router.message(Command('help'))
 async def help(message: Message):
@@ -53,21 +59,38 @@ async def help(message: Message):
         return
     await message.answer(text=HELP_COMMAND)
 
+
 @router.message(Command('balance'))
 async def balance(message: Message):
     user = await client.get_user(message.from_user.username)
     token_amount = user['token_amount']
     await message.answer(f'Ваш текущий баланс: {token_amount}')
 
+
+@router.message(Command('photo_by_id'))
+async def cmd_help(message: Message):
+    if len(message.text.split()) != 2:
+        await message.answer(
+            'Неверное количество аргументов. Используйте команду в формате /photo_by_id <id_task>')
+        return
+
+    id_task = message.text.split()[1]
+
+    try:
+        new_id_task = int(id_task)
+    except ValueError:
+        await message.answer('id задачи должно быть целым числом')
+        return
+
+    # ищем в бд id определенной задачи
+
+
 @router.message(Command('history'))
 async def cmd_help(message: Message):
-    await message.answer('Ваша история операций:')
-    # из бд получаем историю пользователя
+    history = client.get_history(message.from_user.username)
+    #
+    await message.answer('Ваша история операций:\n')
 
-@router.message(Command('favorites'))
-async def cmd_help(message: Message):
-    await message.answer('Ваши избранные запросы:')
-    # из бд получаем избранные вопросы
 
 @router.message(F.text.in_({'yolo8s', 'yolo8m', 'yolo8n'}))
 async def check(message: Message):
@@ -78,30 +101,45 @@ async def check(message: Message):
 
 @router.message(F.photo)
 async def image(message: Message):
-    star_printed = False
-    result = 0
+    if MODEL == '':
+        await message.answer(f'Вы не выбрали модель', reply_markup=kb.main)
+        return
 
-    await clients_queue.put(message.from_user.id)
-    position = clients_queue.qsize
+    await download_photo(message)
 
-    while True:
-        if result == 0:
-            if not star_printed:
-                await message.answer(f'Вы {position} в очереди')
-                star_printed = True
-                result = 1
+    task_id = await client.use_yolo8m(message.from_user.username,'photo.jpg', MODEL)
+    if task_id == 1:
+        await message.answer('Произошла ошибка, попробуйте еще раз')
+        return
 
-            await asyncio.sleep(30)
-        else:
-            await message.answer(f'Запрос обработан')
-            break
+    queue.append(message.from_user.id)
+    position = queue.index(message.from_user.id) + 1
+    previous_position = position
 
-    clients_queue.task_done()
+    result = await client.get_result(task_id)
+    msg = await message.answer(f'Запрос в обработке. Вы {position} в очереди')
+    while result == 0:
+        position = queue.index(message.from_user.id) + 1
+        if position != previous_position:
+            await message.bot.edit_message_text(chat_id=message.chat.id, message_id=msg.message_id,
+                                                text=f'Запрос в обработке. Вы {position} в очереди')
+        await asyncio.sleep(5)
+        result = await client.get_result(task_id)
+
+    await message.bot.delete_message(chat_id=message.chat.id, message_id=msg.message_id)
+
+    if result == 1:
+        await message.answer('Произошла ошибка, попробуйте еще раз')
+        return
+    else:
+        with open('result.jpeg', 'wb') as img_result:
+
+            img_result.write(result['result'])
+
+        await message.send_photo('result.jpeg')
 
 
-
-@router.message(F.photo)
-async def image(message: Message):
+async def download_photo(message: Message):
     photo_file_id = message.photo[-1].file_id
 
     # Скачиваем изображение с сервера Telegram
@@ -115,33 +153,3 @@ async def image(message: Message):
 
         with open('photo.jpg', 'wb') as f:
             f.write(photo_data)
-
-
-    task_id = await client.use_yolo8m(message.from_user.username, 'photo.jpg', MODEL)
-    if task_id == 1:
-        await message.answer('Произошла ошибка, попробуйте еще раз')
-        return
-
-    star_printed = False
-
-    while True:
-        result = await client.get_result(task_id)
-        if result == 0:
-            if not star_printed:
-                await message.answer(f'Запрос в обработке')
-                star_printed = True
-
-            await asyncio.sleep(5)
-        elif result == 1:
-
-            await message.answer('Произошла ошибка, попробуйте еще раз')
-            break
-        else:
-
-            with open('result.jpeg', 'wb') as img_result:
-
-                img_result.write(result['result'])
-
-            await message.send_photo('result.jpeg')
-            break
-

@@ -43,7 +43,6 @@ class APIClient:
                         print(f'Error: {response.status} - {await response.text()}')
                         return 1
 
-
     async def get_result(self, task_id:str):
         async with aiohttp.ClientSession() as session:
             async with session.get(url=f'{self.url}/cv/tasks/{task_id}') as response:
@@ -53,3 +52,12 @@ class APIClient:
                 elif response.status == 102:
                     return 0
                 return 1
+
+    async def get_history(self, user_name:str):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url=f'{self.url}/users/{user_name}') as response:
+                if response.status == 202:
+                    history = json.loads(await response.text())
+                    return history
+                else:
+                    return True

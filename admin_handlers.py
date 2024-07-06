@@ -3,7 +3,10 @@ from aiogram.types import Message
 from aiogram.filters import Command
 import datetime
 
+from api_client import APIClient
+
 admin_router = Router()
+client = APIClient('http://127.0.0.1:8000')
 
 ADMIN_ID = {1396686124, 1935591182}
 
@@ -55,7 +58,7 @@ async def change_price(message: Message):
 @admin_router.message(Command('change_balance'), F.from_user.id.in_(ADMIN_ID))
 async def change_balance(message: Message):
     if len(message.text.split()) != 3:
-        await message.answer('Неверное количество аргументов. Используйте команду в формате /change_balance <user_id> <new_balance>')
+        await message.answer('Неверное количество аргументов. Используйте команду в формате /change_balance <user_name> <new_balance>')
         return
 
     user_id = message.text.split()[1]
@@ -70,3 +73,16 @@ async def change_balance(message: Message):
     # Изменяем баланс пользователя в бд
 
     await message.answer(f'Баланс пользователя с ID {user_id} успешно изменен на {new_balance}')
+
+
+@admin_router.message(Command('balance_user'))
+async def balance(message: Message):
+    if len(message.text.split()) != 2:
+        await message.answer('Неверное количество аргументов. Используйте команду в формате /balance_user <user_name>')
+        return
+
+    user_name = message.text.split()[1]
+
+    user = await client.get_user(user_name)
+    token_amount = user['token_amount']
+    await message.answer(f'Ваш текущий баланс пользователя {user_name}: {token_amount}')
