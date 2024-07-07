@@ -14,6 +14,10 @@ ADMIN_ID = {1396686124, 1935591182}
 
 @admin_router.message(Command('new_users'), F.from_user.id.in_(ADMIN_ID))
 async def new_users(message: Message):
+    user = await client.get_user(message.from_user.username)
+    if user['role'] == 'client':
+        return
+
     if len(message.text.split()) != 3:
         await message.answer('Неверное количество аргументов. Используйте команду в формате /new_users <start_date> <end_date>')
         return

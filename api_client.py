@@ -19,13 +19,21 @@ class APIClient:
     async def get_user(self, user_name:str):
         async with aiohttp.ClientSession() as session:
             async with session.get(url=f'{self.url}/users/{user_name}') as response:
-                if response.status == 202:
+                if response.status == 200:
                     user = json.loads(await response.text())
                     return user
                 else:
                     return True
 
-    async def use_yolo8m(self, user_name, image_path, model):
+    async def check_user(self, user_name:str):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url=f'{self.url}/users/{user_name}') as response:
+                if response.status == 200:
+                    return False
+                else:
+                    return True
+
+    async def use_yolo8(self, user_name, image_path, model):
         async with aiohttp.ClientSession() as session:
             with open(image_path, 'rb') as image_file:
                 image_bytes = image_file.read()
@@ -34,7 +42,7 @@ class APIClient:
                 data.add_field('image', image_bytes, filename='image.jpg', content_type='image/jpeg')
 
                 params = {'user_name': user_name}
-                async with session.post(url=f'{self.url}/cv/{model}', data=data, params=params) as response:
+                async with session.post(url=f'{self.url}/cv/models/{model}', data=data, params=params) as response:
                     if response.status == 202:
                         task_id = (await response.json())['task_id']
                         print(f'Task ID: {task_id}')
@@ -45,10 +53,10 @@ class APIClient:
 
     async def get_result(self, task_id:str):
         async with aiohttp.ClientSession() as session:
-            async with session.get(url=f'{self.url}/cv/tasks/{task_id}') as response:
+            async with session.get(url=f'{self.url}/cv/models/tasks/{task_id}') as response:
                 if response.status == 200:
-                    img = await response.read()
-                    return img
+                    task_result = await response.json()
+                    return task_result
                 elif response.status == 202:
                     return 0
                 return 1
@@ -64,7 +72,7 @@ class APIClient:
 
     async def get_cost_model(self, model:str):
         async with aiohttp.ClientSession() as session:
-            async with session.get(url=f'{self.url}/cv/{model}') as response:
+            async with session.get(url=f'{self.url}/cv/models/{model}') as response:
                 if response.status == 200:
                     cost_model = json.loads(await response.text())
                     return cost_model
