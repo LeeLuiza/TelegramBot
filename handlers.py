@@ -1,5 +1,5 @@
 from aiogram import F, Router
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message, ReplyKeyboardRemove, BufferedInputFile
 from aiogram.filters import CommandStart, Command
 import aiohttp
 import asyncio
@@ -8,20 +8,21 @@ import asyncio
 import keyboards as kb
 from admin_handlers import ADMIN_ID
 from api_client import APIClient
+from model_enum import CVModelEnum
 
 router = Router()
 MODEL = ''
 queue = []
 client = APIClient('http://127.0.0.1:8000')
+user_photos = {}
 
 HELP_COMMAND = """
 Список доступных команд:
-1. /start - начало диалога с ботом
-2. /count_coins - подсчет монет
-3. /balance - текущий баланс
-4. /history - история операций
-5. /photo_by_id <id_task>- просмотреть фотографию, связанную с определенной задачей по id
-6. /model_price - стоимость моделей
+1. /count_coins - подсчет монет
+2. /balance - текущий баланс
+3. /history - история операций
+4. /photo_by_id <id_task>- просмотреть фотографию, связанную с определенной задачей по id
+5. /model_price - стоимость моделей
 """
 
 HELP_COMMAND_ADMIN = """
@@ -30,11 +31,12 @@ HELP_COMMAND_ADMIN = """
 2. /balance - текущий баланс
 3. /history - история операций
 4. /photo_by_id <id_task>- просмотреть фотографию, связанную с определенной задачей по id
-5. /new_users <start_date> <end_date> - количество новых пользователей за период
-6. /users_count - количество пользователей
-7. /change_price <model_name> <new_price> - изменить стоимость модели
-8. /change_balance <user_name> <new_balance> - изменить баланс пользователя
-9. /balance_user <user_name> - посмотреть баланс пользователя
+5. /model_price - стоимость моделей
+6. /new_users <start_date> <end_date> - количество новых пользователей за период
+7. /users_count - количество пользователей
+8. /change_price <model_name> <new_price> - изменить стоимость модели
+9. /change_balance <user_name> <new_balance> - изменить баланс пользователя
+10. /balance_user <user_name> - посмотреть баланс пользователя
 """
 
 
@@ -65,6 +67,15 @@ async def balance(message: Message):
     user = await client.get_user(message.from_user.username)
     token_amount = user['token_amount']
     await message.answer(f'Ваш текущий баланс: {token_amount}')
+
+
+@router.message(Command('model_price'))
+async def model_price(message: Message):
+    msg = ''
+    for model in CVModelEnum:
+        cost_model = await client.get_cost_model(model)
+        msg = msg + f'Стоимость модели {model}: {cost_model} токенов\n'
+    await message.answer(msg)
 
 
 @router.message(Command('photo_by_id'))
@@ -101,8 +112,17 @@ async def check(message: Message):
 
 @router.message(F.photo)
 async def image(message: Message):
+    user_id = message.from_user.id
+    if user_id not in user_photos:
+        user_photos[user_id] = message.photo[-1].file_id
+    else:
+        await message.answer("Извините, вы уже отправили фотографию ранее.")
+
     if MODEL == '':
         await message.answer(f'Вы не выбрали модель', reply_markup=kb.main)
+        return
+
+    if await check_balance(message):
         return
 
     await download_photo(message)
@@ -133,10 +153,11 @@ async def image(message: Message):
         return
     else:
         with open('result.jpeg', 'wb') as img_result:
+            img_result.write(result)
 
-            img_result.write(result['result'])
+        await message.bot.send_photo(chat_id=message.chat.id, photo=BufferedInputFile(result, 'result.jpeg'))
 
-        await message.send_photo('result.jpeg')
+    queue.remove(message.from_user.id)
 
 
 async def download_photo(message: Message):
@@ -153,3 +174,13 @@ async def download_photo(message: Message):
 
         with open('photo.jpg', 'wb') as f:
             f.write(photo_data)
+
+async def check_balance(message: Message):
+    user = await client.get_user(message.from_user.username)
+    token_amount = user['token_amount']
+    cost_model = await client.get_cost_model(MODEL)
+    if token_amount - cost_model['cost'] < 0:
+        await message.answer('Недостаточно токенов. Выберите другую модель, либо пополните счет')
+        return False
+    else:
+        return True

@@ -4,6 +4,7 @@ from aiogram.filters import Command
 import datetime
 
 from api_client import APIClient
+from model_enum import CVModelEnum
 
 admin_router = Router()
 client = APIClient('http://127.0.0.1:8000')
@@ -44,13 +45,17 @@ async def change_price(message: Message):
     model_name = args[1]
     new_price = args[2]
 
+    if model_name not in CVModelEnum:
+        await message.answer('Такой модели не существует')
+        return
+
     try:
-        new_price = float(new_price)
+        new_price = int(new_price)
     except ValueError:
         await message.answer('Новый ценник должен быть числом')
         return
 
-    # Обновляем цену в бд
+    await client.change_model_cost(model_name, new_price)
 
     await message.answer(f'Цена модели "{model_name}" успешно изменена на {new_price}')
 
@@ -61,18 +66,18 @@ async def change_balance(message: Message):
         await message.answer('Неверное количество аргументов. Используйте команду в формате /change_balance <user_name> <new_balance>')
         return
 
-    user_id = message.text.split()[1]
+    user_name = message.text.split()[1]
     new_balance = message.text.split()[2]
 
     try:
-        new_price = float(new_balance)
+        new_price = int(new_balance)
     except ValueError:
-        await message.answer('Новый баланс должен быть числом')
+        await message.answer('Новый баланс должен быть целым числом')
         return
 
-    # Изменяем баланс пользователя в бд
+    await client.change_token(user_name, new_price)
 
-    await message.answer(f'Баланс пользователя с ID {user_id} успешно изменен на {new_balance}')
+    await message.answer(f'Баланс пользователя {user_name} успешно изменен на {new_balance}')
 
 
 @admin_router.message(Command('balance_user'))

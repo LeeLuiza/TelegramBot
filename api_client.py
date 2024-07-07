@@ -47,17 +47,46 @@ class APIClient:
         async with aiohttp.ClientSession() as session:
             async with session.get(url=f'{self.url}/cv/tasks/{task_id}') as response:
                 if response.status == 200:
-                    img = json.loads(await response.text())
+                    img = await response.read()
                     return img
-                elif response.status == 102:
+                elif response.status == 202:
                     return 0
                 return 1
 
     async def get_history(self, user_name:str):
         async with aiohttp.ClientSession() as session:
-            async with session.get(url=f'{self.url}/users/{user_name}') as response:
-                if response.status == 202:
+            async with session.get(url=f'{self.url}/cv/models/tasks/{user_name}') as response:
+                if response.status == 200:
                     history = json.loads(await response.text())
                     return history
                 else:
                     return True
+
+    async def get_cost_model(self, model:str):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url=f'{self.url}/cv/{model}') as response:
+                if response.status == 200:
+                    cost_model = json.loads(await response.text())
+                    return cost_model
+                else:
+                    return True
+
+    async def change_token(self, user_name:str, token_amount:int):
+        body = {
+
+            "user_name":user_name,
+            "token_amount":token_amount
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url=f'{self.url}/users/{user_name}', json=body) as response:
+                return await response.text()
+
+    async def change_model_cost(self, model_name:str, new_cost:int):
+        body = {
+
+            "model_name":model_name,
+            "new_cost":new_cost
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.patch(url=f'{self.url}/cv/models/{model_name}/cost', json=body) as response:
+                return await response.text()
