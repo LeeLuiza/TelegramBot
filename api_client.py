@@ -25,6 +25,15 @@ class APIClient:
                 else:
                     return True
 
+    async def get_all_user(self):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url=f'{self.url}/users/') as response:
+                if response.status == 200:
+                    users = json.loads(await response.text())
+                    return users
+                else:
+                    return True
+
     async def check_user(self, user_name:str):
         async with aiohttp.ClientSession() as session:
             async with session.get(url=f'{self.url}/users/{user_name}') as response:
@@ -63,7 +72,7 @@ class APIClient:
 
     async def get_history(self, user_name:str):
         async with aiohttp.ClientSession() as session:
-            async with session.get(url=f'{self.url}/cv/models/tasks/{user_name}') as response:
+            async with session.get(url=f'{self.url}/cv/models/tasks/history/{user_name}') as response:
                 if response.status == 200:
                     history = json.loads(await response.text())
                     return history
@@ -80,21 +89,18 @@ class APIClient:
                     return True
 
     async def change_token(self, user_name:str, token_amount:int):
-        body = {
 
-            "user_name":user_name,
-            "token_amount":token_amount
-        }
         async with aiohttp.ClientSession() as session:
-            async with session.post(url=f'{self.url}/users/{user_name}', json=body) as response:
+            async with session.patch(url=f'{self.url}/users/{user_name}/tokens', params=[('token_amount', token_amount)]) as response:
+                return await response.text()
+
+    async def change_role(self, user_name:str, new_role:str):
+        async with aiohttp.ClientSession() as session:
+            async with session.patch(url=f'{self.url}/users/{user_name}/role', params=[('new_role', new_role)]) as response:
                 return await response.text()
 
     async def change_model_cost(self, model_name:str, new_cost:int):
-        body = {
 
-            "model_name":model_name,
-            "new_cost":new_cost
-        }
         async with aiohttp.ClientSession() as session:
-            async with session.patch(url=f'{self.url}/cv/models/{model_name}/cost', json=body) as response:
+            async with session.patch(url=f'{self.url}/cv/models/{model_name}/cost', params=[('new_cost', new_cost)]) as response:
                 return await response.text()

@@ -8,6 +8,8 @@ import base64
 import keyboards as kb
 from api_client import APIClient
 from model_enum import CVModelEnum
+import io
+import zipfile
 
 router = Router()
 MODEL = ''
@@ -20,8 +22,7 @@ HELP_COMMAND = """
 1. /count_coins - подсчет монет
 2. /balance - текущий баланс
 3. /history - история операций
-4. /photo_by_id <id_task>- просмотреть фотографию, связанную с определенной задачей по id
-5. /model_price - стоимость моделей
+4. /model_price - стоимость моделей
 """
 
 HELP_COMMAND_ADMIN = """
@@ -29,13 +30,13 @@ HELP_COMMAND_ADMIN = """
 1. /count_coins - подсчет монет
 2. /balance - текущий баланс
 3. /history - история операций
-4. /photo_by_id <id_task>- просмотреть фотографию, связанную с определенной задачей по id
-5. /model_price - стоимость моделей
-6. /new_users <start_date> <end_date> - количество новых пользователей за период
-7. /users_count - количество пользователей
-8. /change_price <model_name> <new_price> - изменить стоимость модели
-9. /change_balance <user_name> <new_balance> - изменить баланс пользователя
-10. /balance_user <user_name> - посмотреть баланс пользователя
+4. /model_price - стоимость моделей
+5. /new_users <start_date> <end_date> - количество новых пользователей за период
+6. /users_count - количество пользователей
+7. /change_price <model_name> <new_price> - изменить стоимость модели
+8. /change_balance <user_name> <new_balance> - изменить баланс пользователя
+9. /balance_user <user_name> - посмотреть баланс пользователя
+10. /change_role <user_name> <new_role> - изменить роль пользователя
 """
 
 
@@ -81,32 +82,33 @@ async def model_price(message: Message):
     await message.answer(msg)
 
 
-@router.message(Command('photo_by_id'))
-async def cmd_help(message: Message):
-    if len(message.text.split()) != 2:
-        await message.answer(
-            'Неверное количество аргументов. Используйте команду в формате /photo_by_id <id_task>')
-        return
-
-    id_task = message.text.split()[1]
-
-    try:
-        new_id_task = int(id_task)
-    except ValueError:
-        await message.answer('id задачи должно быть целым числом')
-        return
-
-    # ищем в бд id определенной задачи
-
-
 @router.message(Command('history'))
 async def cmd_help(message: Message):
     history = client.get_history(message.from_user.username)
-    #
-    await message.answer('Ваша история операций:\n')
+
+    # Преобразуем изображения в байтовый массив
+    image_bytes = [base64.b64decode(img) for img in history]
+
+    # Создаем zip-файл из изображений
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
+        for i, img_bytes in enumerate(image_bytes):
+            zip_file.writestr(f'image_{i}.jpg', img_bytes)
+
+    # Отправляем zip-файл
+    zip_buffer.seek(0)
+    zip_file = BufferedInputFile(zip_buffer.read(), filename='photos.zip')
+    await message.bot.send_document(message.chat.id, zip_file, 'Ваша история:')
 
 
 @router.message(F.text.in_(CVModelEnum))
+async def check(message: Message):
+    global MODEL
+    await message.answer('Cделай фотографию для подсчета монет', reply_markup=ReplyKeyboardRemove())
+    MODEL = message.text
+
+
+@router.message(F.text == 'Выбрать все модели')
 async def check(message: Message):
     global MODEL
     await message.answer('Cделай фотографию для подсчета монет', reply_markup=ReplyKeyboardRemove())
@@ -169,8 +171,8 @@ async def processing_result(message: Message, task_id):
         with open('result.jpeg', 'wb') as img_result:
             img_result.write(image_data)
 
-        await message.bot.send_photo(chat_id=message.chat.id, photo=BufferedInputFile(result, 'result.jpeg'),
-                                     caption=msg)
+        await message.bot.send_photo(chat_id=message.chat.id, photo=BufferedInputFile(image_data, 'result.jpeg'),
+                                     caption=f'Подсчитанная сумма: {str(msg)}')
 
     queue.remove(message.from_user.id)
 
@@ -212,10 +214,12 @@ async def check_balance(message: Message, all_model: bool):
     price = 0
     if all_model:
         for model in CVModelEnum:
-            price = price + await client.get_cost_model(model)
+            price_model = await client.get_cost_model(model)
+            price = price + price_model['cost']
     else:
-        price = await client.get_cost_model(MODEL)
-    if token_amount - price['cost'] < 0:
+        price_model = await client.get_cost_model(MODEL)
+        price = price_model['cost']
+    if token_amount - price < 0:
         await message.answer('Недостаточно токенов. Выберите другую модель, либо пополните счет')
         return True
     else:
