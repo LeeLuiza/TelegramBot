@@ -118,20 +118,24 @@ async def check(message: Message):
 @router.message(F.photo)
 async def image(message: Message):
 
-    # user_id = message.from_user.id
-    # if user_id not in user_photos:
-    #     user_photos[user_id] = message.photo[-1].file_id
-    # else:
-    #     await message.answer("Извините, вы уже отправили фотографию ранее.")
+    user_id = message.from_user.id
+    if user_id not in user_photos:
+        user_photos[user_id] = message.photo[-1].file_id
+    else:
+        await message.answer("Извините, вы уже отправили фотографию ранее.")
+        return
 
     if MODEL == 'Выбрать все модели':
         await all_models(message)
+        user_photos.pop(user_id, None)
         return
     elif MODEL == '':
         await message.answer(f'Вы не выбрали модель', reply_markup=kb.main)
+        user_photos.pop(user_id, None)
         return
 
     if await check_balance(message, False):
+        user_photos.pop(user_id, None)
         return
 
     await download_photo(message)
@@ -139,9 +143,11 @@ async def image(message: Message):
     task_id = await client.use_yolo8(message.from_user.username,'photo.jpg', MODEL)
     if task_id == 1:
         await message.answer('Произошла ошибка, попробуйте еще раз')
+        user_photos.pop(user_id, None)
         return
 
     await processing_result(message, task_id)
+    user_photos.pop(user_id, None)
 
 
 async def processing_result(message: Message, task_id):
